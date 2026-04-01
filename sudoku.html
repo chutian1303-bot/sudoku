@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数独游戏</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff;
+    --bg2: #f5f4f0;
+    --bg3: #eeece7;
+    --text: #1a1a18;
+    --text2: #6b6a66;
+    --border: rgba(0,0,0,0.15);
+    --border2: rgba(0,0,0,0.28);
+    --border3: rgba(0,0,0,0.4);
+    --blue: #185FA5;
+    --blue-bg: #E6F1FB;
+    --blue-light: #B5D4F4;
+    --green: #3B6D11;
+    --green-bg: #EAF3DE;
+    --green-mid: #C0DD97;
+    --red: #A32D2D;
+    --red-bg: #FCEBEB;
+    --cell: 54px;
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c;
+      --bg2: #2a2a27;
+      --bg3: #323230;
+      --text: #f0ede6;
+      --text2: #9e9c96;
+      --border: rgba(255,255,255,0.15);
+      --border2: rgba(255,255,255,0.28);
+      --border3: rgba(255,255,255,0.4);
+      --blue: #378ADD;
+      --blue-bg: #042C53;
+      --blue-light: #0C447C;
+      --green: #97C459;
+      --green-bg: #173404;
+      --green-mid: #3B6D11;
+      --red: #F09595;
+      --red-bg: #501313;
+    }
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    background: var(--bg2);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1rem 4rem;
+  }
+  #app { width: 100%; max-width: 520px; }
+  h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.5px; margin-bottom: 4px; }
+  #subtitle { font-size: 13px; color: var(--text2); margin-bottom: 1.5rem; }
+  #status-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  #timer { font-size: 15px; font-weight: 500; color: var(--text2); font-variant-numeric: tabular-nums; }
+  #mistakes { font-size: 13px; color: var(--text2); }
+  #mistakes span { color: #E24B4A; font-weight: 600; }
+  #diff-row { display: flex; gap: 6px; margin-bottom: 14px; }
+  .diff-btn {
+    flex: 1; height: 30px; font-size: 12px; cursor: pointer;
+    border-radius: var(--radius); border: 0.5px solid var(--border);
+    background: var(--bg3); color: var(--text2); transition: all 0.1s;
+    font-family: inherit;
+  }
+  .diff-btn:hover { background: var(--bg); color: var(--text); }
+  .diff-btn.active { background: var(--bg); border-color: var(--border3); color: var(--text); font-weight: 500; }
+  #board-wrap { position: relative; margin-bottom: 14px; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(9, var(--cell));
+    border: 2.5px solid var(--text);
+    width: fit-content;
+    margin: 0 auto;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .cell {
+    width: var(--cell); height: var(--cell);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 400;
+    cursor: pointer; position: relative;
+    border-right: 0.5px solid var(--border);
+    border-bottom: 0.5px solid var(--border);
+    transition: background 0.08s;
+    color: var(--text);
+    user-select: none;
+    background: var(--bg);
+  }
+  .cell:nth-child(3n)   { border-right: 2px solid var(--text); }
+  .cell:nth-child(9n)   { border-right: none; }
+  .cell:nth-child(n+19):nth-child(-n+27),
+  .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid var(--text); }
+  .cell.given    { font-weight: 600; }
+  .cell.user-in  { color: var(--blue); }
+  .cell.selected { background: var(--blue-light) !important; }
+  .cell.highlight{ background: var(--bg2); }
+  .cell.same-num { background: var(--blue-bg); }
+  .cell.error    { color: var(--red) !important; background: var(--red-bg) !important; }
+  .cell.hint-flash { background: var(--green-mid) !important; }
+  .notes-grid {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    grid-template-rows: repeat(3,1fr);
+    width: 100%; height: 100%; padding: 2px;
+  }
+  .note { font-size: 9px; display: flex; align-items: center; justify-content: center; color: var(--text2); }
+  #win-overlay {
+    display: none; position: absolute; inset: 0;
+    background: rgba(234,243,222,0.96);
+    border-radius: 4px;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; z-index: 10;
+  }
+  @media (prefers-color-scheme: dark) {
+    #win-overlay { background: rgba(23,52,4,0.96); }
+  }
+  #win-overlay.show { display: flex; }
+  #win-overlay h2 { font-size: 24px; font-weight: 600; color: var(--green); }
+  #win-overlay p  { font-size: 14px; color: var(--green); opacity: 0.8; }
+  #new-win-btn {
+    padding: 8px 24px; font-size: 14px; cursor: pointer;
+    border-radius: var(--radius); border: 1.5px solid var(--green);
+    background: transparent; color: var(--green); font-weight: 500;
+    font-family: inherit; transition: background 0.15s;
+  }
+  #new-win-btn:hover { background: var(--green-mid); }
+  #numpad {
+    display: grid; grid-template-columns: repeat(9, 1fr);
+    gap: 5px; margin-bottom: 10px;
+  }
+  .num-btn {
+    height: 42px; font-size: 18px; font-weight: 500;
+    cursor: pointer; border-radius: var(--radius);
+    border: 0.5px solid var(--border2);
+    background: var(--bg); color: var(--text);
+    transition: background 0.1s, transform 0.08s;
+    font-family: inherit;
+  }
+  .num-btn:hover  { background: var(--bg3); }
+  .num-btn:active { transform: scale(0.93); }
+  .num-btn.done   { opacity: 0.2; pointer-events: none; }
+  #controls { display: flex; gap: 8px; }
+  .ctrl-btn {
+    flex: 1; height: 36px; font-size: 13px; cursor: pointer;
+    border-radius: var(--radius); border: 0.5px solid var(--border);
+    background: var(--bg); color: var(--text2);
+    transition: background 0.1s, color 0.1s;
+    font-family: inherit;
+  }
+  .ctrl-btn:hover { background: var(--bg3); color: var(--text); }
+  .ctrl-btn.on { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+  @keyframes winCell { 0%{background:var(--bg)} 50%{background:var(--green-mid)} 100%{background:var(--green-bg)} }
+  .cell.win { animation: winCell 0.5s ease forwards; }
+  @media (max-width: 520px) {
+    :root { --cell: calc((100vw - 2rem - 5px) / 9); }
+    .num-btn { font-size: 16px; height: 38px; }
+    h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>数独</h1>
+  <p id="subtitle">每行、每列、每个 3×3 宫格各含数字 1–9</p>
+  <div id="status-bar">
+    <div id="timer">00:00</div>
+    <div id="mistakes">错误：<span id="err-cnt">0</span> / 3</div>
+  </div>
+  <div id="diff-row">
+    <button class="diff-btn active" data-d="easy">简单</button>
+    <button class="diff-btn" data-d="medium">中等</button>
+    <button class="diff-btn" data-d="hard">困难</button>
+  </div>
+  <div id="board-wrap">
+    <div id="board"></div>
+    <div id="win-overlay">
+      <h2>🎉 恭喜完成！</h2>
+      <p id="win-time"></p>
+      <button id="new-win-btn">再来一局</button>
+    </div>
+  </div>
+  <div id="numpad"></div>
+  <div id="controls">
+    <button class="ctrl-btn" id="btn-erase">清除</button>
+    <button class="ctrl-btn" id="btn-note">笔记</button>
+    <button class="ctrl-btn" id="btn-hint">提示</button>
+    <button class="ctrl-btn" id="btn-new">新游戏</button>
+  </div>
+</div>
+<script>
+const E=0;
+let sol=[],puz=[],usr=[],nts=[],sel=-1,noteMode=false,secs=0,errs=0,diff='easy',over=false,tid=null;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function ok(g,p,v){
+  const r=Math.floor(p/9),c=p%9;
+  for(let x=0;x<9;x++) if(g[r*9+x]===v||g[x*9+c]===v) return false;
+  const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;
+  for(let rr=br;rr<br+3;rr++) for(let cc=bc;cc<bc+3;cc++) if(g[rr*9+cc]===v) return false;
+  return true;
+}
+
+function solve(g){
+  const i=g.indexOf(E); if(i<0) return true;
+  for(const n of shuffle([1,2,3,4,5,6,7,8,9])){
+    if(ok(g,i,n)){g[i]=n; if(solve(g)) return true; g[i]=E;}
+  }
+  return false;
+}
+
+function gen(){
+  const g=Array(81).fill(E); solve(g); sol=[...g];
+  const rm={easy:35,medium:47,hard:55}[diff];
+  const p=[...g],pos=shuffle([...Array(81).keys()]);
+  for(let i=0;i<rm;i++) p[pos[i]]=E;
+  puz=p; usr=p.map(v=>v); nts=Array(81).fill(null).map(()=>new Set());
+}
+
+function cellEl(i){return document.querySelector(`.cell[data-i="${i}"]`);}
+
+function redrawCell(i){
+  const el=cellEl(i); if(!el) return;
+  el.className='cell'; el.innerHTML='';
+  if(puz[i]!==E){el.classList.add('given');el.textContent=puz[i];}
+  else if(usr[i]!==E){
+    el.classList.add('user-in');
+    if(usr[i]!==sol[i]) el.classList.add('error');
+    el.textContent=usr[i];
+  } else if(nts[i].size>0){
+    const ng=document.createElement('div'); ng.className='notes-grid';
+    for(let n=1;n<=9;n++){const d=document.createElement('div');d.className='note';d.textContent=nts[i].has(n)?n:'';ng.appendChild(d);}
+    el.appendChild(ng);
+  }
+}
+
+function highlight(){
+  document.querySelectorAll('.cell').forEach((el,i)=>{
+    el.classList.remove('selected','highlight','same-num');
+    if(sel<0) return;
+    const sr=Math.floor(sel/9),sc=sel%9,r=Math.floor(i/9),c=i%9;
+    const sbr=Math.floor(sr/3)*3,sbc=Math.floor(sc/3)*3,ibr=Math.floor(r/3)*3,ibc=Math.floor(c/3)*3;
+    if(i===sel){el.classList.add('selected');return;}
+    if(r===sr||c===sc||(ibr===sbr&&ibc===sbc)) el.classList.add('highlight');
+    const sv=usr[sel]||puz[sel];
+    if(sv&&(usr[i]===sv||puz[i]===sv)) el.classList.add('same-num');
+  });
+}
+
+function input(n){
+  if(sel<0||over||puz[sel]!==E) return;
+  if(noteMode){
+    if(nts[sel].has(n)) nts[sel].delete(n); else nts[sel].add(n);
+    usr[sel]=E;
+  } else {
+    if(usr[sel]===n){usr[sel]=E;nts[sel].clear();}
+    else{
+      if(n!==sol[sel]){errs++;document.getElementById('err-cnt').textContent=errs;if(errs>=3){endGame(false);return;}}
+      usr[sel]=n; nts[sel].clear();
+    }
+  }
+  redrawCell(sel); highlight(); updateNP(); checkWin();
+}
+
+function erase(){
+  if(sel<0||over||puz[sel]!==E) return;
+  usr[sel]=E; nts[sel].clear(); redrawCell(sel); highlight(); updateNP();
+}
+
+function hint(){
+  if(over) return;
+  const pool=[];
+  for(let i=0;i<81;i++) if(puz[i]===E&&usr[i]!==sol[i]) pool.push(i);
+  if(!pool.length) return;
+  const idx=(sel>=0&&puz[sel]===E&&usr[sel]!==sol[sel])?sel:pool[Math.floor(Math.random()*pool.length)];
+  usr[idx]=sol[idx]; nts[idx].clear(); puz[idx]=sol[idx];
+  redrawCell(idx);
+  const el=cellEl(idx); if(el){el.classList.add('hint-flash');setTimeout(()=>{el.classList.remove('hint-flash');highlight();},800);}
+  updateNP(); checkWin();
+}
+
+function cnt(n){let c=0;for(let i=0;i<81;i++) if(usr[i]===n||puz[i]===n) c++;return c;}
+function updateNP(){document.querySelectorAll('.num-btn').forEach(b=>{b.classList.toggle('done',cnt(+b.dataset.n)>=9);});}
+
+function checkWin(){
+  for(let i=0;i<81;i++) if((puz[i]||usr[i])!==sol[i]) return;
+  endGame(true);
+}
+
+function endGame(won){
+  over=true; clearInterval(tid);
+  if(won){
+    document.querySelectorAll('.cell').forEach((c,i)=>setTimeout(()=>c.classList.add('win'),i*4));
+    setTimeout(()=>{
+      document.getElementById('win-overlay').classList.add('show');
+      const m=Math.floor(secs/60),s=secs%60;
+      document.getElementById('win-time').textContent=`用时 ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    },500);
+  }
+}
+
+function tick(){if(!over){secs++;const m=Math.floor(secs/60),s=secs%60;document.getElementById('timer').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}}
+
+function buildBoard(){
+  const board=document.getElementById('board'); board.innerHTML='';
+  for(let i=0;i<81;i++){
+    const c=document.createElement('div'); c.className='cell'; c.dataset.i=i;
+    redrawCell(i);
+    c.addEventListener('click',()=>{sel=i;highlight();});
+    board.appendChild(c);
+  }
+  // re-render after appending
+  for(let i=0;i<81;i++) redrawCell(i);
+}
+
+function buildNP(){
+  const np=document.getElementById('numpad'); np.innerHTML='';
+  for(let n=1;n<=9;n++){
+    const b=document.createElement('button'); b.className='num-btn'; b.dataset.n=n; b.textContent=n;
+    b.addEventListener('click',()=>input(n)); np.appendChild(b);
+  }
+}
+
+function newGame(){
+  over=false; errs=0; sel=-1; secs=0; noteMode=false;
+  document.getElementById('err-cnt').textContent='0';
+  document.getElementById('timer').textContent='00:00';
+  document.getElementById('win-overlay').classList.remove('show');
+  document.getElementById('btn-note').classList.remove('on');
+  clearInterval(tid); gen(); buildBoard(); buildNP(); updateNP();
+  tid=setInterval(tick,1000);
+}
+
+document.getElementById('btn-erase').addEventListener('click',erase);
+document.getElementById('btn-note').addEventListener('click',()=>{noteMode=!noteMode;document.getElementById('btn-note').classList.toggle('on',noteMode);});
+document.getElementById('btn-hint').addEventListener('click',hint);
+document.getElementById('btn-new').addEventListener('click',newGame);
+document.getElementById('new-win-btn').addEventListener('click',newGame);
+document.querySelectorAll('.diff-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.diff-btn').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); diff=b.dataset.d; newGame();
+}));
+document.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='9') input(+e.key);
+  else if(e.key==='Backspace'||e.key==='Delete') erase();
+  else if(e.key==='ArrowRight') {sel=sel<0?0:Math.min(80,sel+1);highlight();}
+  else if(e.key==='ArrowLeft')  {sel=sel<0?0:Math.max(0,sel-1);highlight();}
+  else if(e.key==='ArrowDown')  {sel=sel<0?0:Math.min(80,sel+9);highlight();}
+  else if(e.key==='ArrowUp')    {sel=sel<0?0:Math.max(0,sel-9);highlight();}
+  else if(e.key==='n'||e.key==='N'){noteMode=!noteMode;document.getElementById('btn-note').classList.toggle('on',noteMode);}
+});
+
+newGame();
+</script>
+</body>
+</html>
